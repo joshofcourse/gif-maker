@@ -2,7 +2,7 @@
 
 A lightweight, single-file GIF creator that runs entirely in the browser. Nothing is uploaded.
 
-Open `gif-maker.html` in a browser.
+Live at https://joshofcourse.github.io/gif-maker/ — or open `index.html` locally.
 
 - Upload images, drag to reorder, duplicate, remove, reverse
 - Per-frame timing (or set all at once) with live preview
