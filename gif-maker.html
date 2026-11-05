@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIF Maker</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #161616; --muted: #6b6b6b;
+    --line: #e3e1dc; --accent: #2f5bff; --accent-ink: #fff; --danger: #d43c2c;
+    --drop: #eef1ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121212; --panel: #1c1c1c; --ink: #eee; --muted: #9a9a9a;
+      --line: #2e2e2e; --accent: #6d8cff; --accent-ink: #0b0b0b; --danger: #ff6b5b; --drop: #1d2340; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif; }
+  header { padding: 18px 24px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header span { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 1fr 340px; gap: 0; min-height: calc(100vh - 58px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .left { padding: 20px 24px; overflow: auto; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: background .15s, border-color .15s; }
+  .drop.over { background: var(--drop); border-color: var(--accent); color: var(--ink); }
+  .drop strong { color: var(--ink); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 18px 0 12px; }
+  .toolbar .grow { flex: 1; }
+
+  .frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .frame { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: relative;
+    cursor: grab; transition: transform .12s, box-shadow .12s, opacity .12s; }
+  .frame.dragging { opacity: .35; }
+  .frame.target { box-shadow: 0 0 0 2px var(--accent); }
+  .frame.playing { box-shadow: 0 0 0 2px var(--ink); }
+  .frame .thumb { aspect-ratio: 1; background: repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+    display: flex; align-items: center; justify-content: center; }
+  .frame img { max-width: 100%; max-height: 100%; display: block; pointer-events: none; }
+  .frame .idx { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px;
+    padding: 1px 7px; border-radius: 99px; font-variant-numeric: tabular-nums; }
+  .frame .meta { display: flex; align-items: center; gap: 4px; padding: 6px; border-top: 1px solid var(--line); }
+  .frame .meta input { width: 100%; min-width: 0; }
+  .frame .meta .ms { color: var(--muted); font-size: 12px; }
+  .frame .acts { position: absolute; top: 6px; right: 6px; display: none; gap: 4px; }
+  .frame:hover .acts, .frame:focus-within .acts { display: flex; }
+  .frame .acts button { width: 24px; height: 24px; padding: 0; border-radius: 6px; font-size: 13px; line-height: 1;
+    background: rgba(0,0,0,.65); color: #fff; border: none; }
+
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  button, select, input { font: inherit; color: inherit; }
+  button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; }
+  input[type=number], input[type=text], select { background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; }
+  input[type=color] { width: 36px; height: 30px; border: 1px solid var(--line); border-radius: 7px; padding: 2px; background: var(--bg); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  .field { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .field label { color: var(--muted); font-size: 13px; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .row > * { min-width: 0; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: -4px; margin-bottom: 10px; }
+
+  .preview-wrap { background: repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+    border-radius: 10px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; min-height: 160px; overflow: hidden; }
+  #preview, #result { max-width: 100%; max-height: 300px; display: block; image-rendering: auto; }
+  .progress { height: 4px; background: var(--line); border-radius: 99px; overflow: hidden; display: none; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+  .result { display: none; flex-direction: column; gap: 10px; }
+  .result .stats { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .result .stats b { color: var(--ink); }
+  a.dl { display: block; text-align: center; text-decoration: none; background: var(--ink); color: var(--bg); border-radius: 8px; padding: 9px; font-weight: 600; }
+</style>
+</head>
+<body>
+<header><h1>GIF Maker</h1><span>Everything runs in your browser — nothing is uploaded.</span></header>
+<main>
+  <section class="left">
+    <div class="drop" id="drop">
+      <strong>Drop images here</strong> or click to choose · PNG, JPG, WebP, GIF (first frame)
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </div>
+
+    <div class="toolbar">
+      <span class="grow" id="count">0 frames</span>
+      <label class="row">All frames
+        <input type="number" id="allDelay" value="500" min="20" step="10" style="width:80px"> ms
+      </label>
+      <button id="applyAll">Apply</button>
+      <button id="reverse" class="ghost">Reverse</button>
+      <button id="clear" class="ghost">Clear</button>
+    </div>
+
+    <div class="frames" id="frames"></div>
+    <div class="empty" id="empty">Add some images to get started. Drag frames to reorder.</div>
+  </section>
+
+  <aside>
+    <div>
+      <h2>Preview</h2>
+      <div class="preview-wrap"><canvas id="preview" width="320" height="320"></canvas></div>
+      <div class="row" style="margin-top:8px">
+        <button id="play">Pause</button>
+        <span id="pinfo" style="color:var(--muted);font-size:12px"></span>
+      </div>
+    </div>
+
+    <div>
+      <h2>Playback</h2>
+      <div class="field"><label>Loop</label>
+        <div class="row">
+          <select id="loop" style="flex:1">
+            <option value="forever">Forever</option>
+            <option value="once">Play once</option>
+            <option value="count">Play N times</option>
+          </select>
+          <input type="number" id="loopN" value="3" min="2" max="65535" style="width:64px; display:none">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Size</h2>
+      <div class="field"><label>Aspect</label>
+        <select id="aspect">
+          <option value="first">Match first frame</option>
+          <option value="1">1 : 1</option>
+          <option value="1.7778">16 : 9</option>
+          <option value="0.8">4 : 5</option>
+          <option value="0.5625">9 : 16</option>
+          <option value="1.3333">4 : 3</option>
+        </select>
+      </div>
+      <div class="field"><label>Width</label>
+        <div class="row">
+          <select id="widthPreset" style="flex:1">
+            <option>240</option><option>320</option><option selected>480</option><option>640</option>
+            <option>800</option><option>1080</option><option value="custom">Custom…</option>
+          </select>
+          <input type="number" id="widthCustom" value="600" min="16" max="4000" style="width:76px; display:none">
+        </div>
+      </div>
+      <div class="hint" id="dims"></div>
+      <div class="field"><label>Fit</label>
+        <select id="fit">
+          <option value="contain">Contain (pad)</option>
+          <option value="cover">Cover (crop)</option>
+          <option value="stretch">Stretch</option>
+        </select>
+      </div>
+      <div class="field"><label>Background</label>
+        <div class="row"><input type="color" id="bg" value="#ffffff"><span class="hint" style="margin:0">used for padding &amp; transparency</span></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Compression</h2>
+      <div class="field"><label>Colours <b id="colorsV">256</b></label>
+        <input type="range" id="colors" min="2" max="256" value="256">
+      </div>
+      <div class="field"><label>Palette</label>
+        <select id="paletteMode">
+          <option value="global">Shared (smaller)</option>
+          <option value="local">Per frame (sharper)</option>
+        </select>
+      </div>
+      <div class="field"><label>Quality</label>
+        <select id="format">
+          <option value="rgb565">High</option>
+          <option value="rgb444">Lower (faster, smaller)</option>
+        </select>
+      </div>
+      <div class="field"><label>Dithering</label>
+        <select id="dither">
+          <option value="none">Off (smaller)</option>
+          <option value="fs">Floyd–Steinberg</option>
+        </select>
+      </div>
+      <div class="field"><label>Skip frames</label>
+        <select id="skip">
+          <option value="1">Keep all</option>
+          <option value="2">Every 2nd</option>
+          <option value="3">Every 3rd</option>
+        </select>
+      </div>
+      <div class="hint">Skipped frames add their time to the kept frame, so total duration stays the same.</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="row"><input type="text" id="fname" value="animation" style="flex:1"><span style="color:var(--muted)">.gif</span></div>
+      <button class="primary" id="export" disabled>Export GIF</button>
+      <div class="progress" id="progress"><div></div></div>
+      <div class="result" id="resultBox">
+        <div class="preview-wrap"><img id="result" alt="Exported GIF"></div>
+        <div class="stats"><span>Size <b id="rSize"></b></span><span><b id="rDims"></b></span><span><b id="rTime"></b></span></div>
+        <a class="dl" id="dl" download="animation.gif">Download</a>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script type="module">
+import { GIFEncoder, quantize, applyPalette } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
+
+const $ = (id) => document.getElementById(id);
+let frames = [];   // { id, bitmap, url, name, delay }
+let uid = 0;
+
+// ---------- adding images ----------
+const drop = $("drop"), fileInput = $("file");
+drop.onclick = () => fileInput.click();
+fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ""; };
+["dragenter", "dragover"].forEach(e => drop.addEventListener(e, ev => {
+  if (![...ev.dataTransfer.types].includes("Files")) return;
+  ev.preventDefault(); drop.classList.add("over");
+}));
+["dragleave", "drop"].forEach(e => drop.addEventListener(e, () => drop.classList.remove("over")));
+drop.addEventListener("drop", ev => { ev.preventDefault(); addFiles(ev.dataTransfer.files); });
+// allow dropping anywhere on the page too
+document.addEventListener("dragover", ev => { if ([...ev.dataTransfer.types].includes("Files")) ev.preventDefault(); });
+document.addEventListener("drop", ev => {
+  if (ev.dataTransfer.files.length && !drop.contains(ev.target)) { ev.preventDefault(); addFiles(ev.dataTransfer.files); }
+});
+
+async function addFiles(list) {
+  const files = [...list].filter(f => f.type.startsWith("image/"))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const d = clampDelay(+$("allDelay").value);
+  for (const f of files) {
+    try {
+      const bitmap = await createImageBitmap(f);
+      frames.push({ id: ++uid, bitmap, url: URL.createObjectURL(f), name: f.name, delay: d });
+    } catch (e) { console.warn("Could not read", f.name, e); }
+  }
+  render();
+}
+
+const clampDelay = (v) => Math.max(20, Math.min(60000, Math.round(+v || 100)));
+
+// ---------- frame list ----------
+let dragIdx = null;
+function render() {
+  const wrap = $("frames");
+  wrap.innerHTML = "";
+  frames.forEach((fr, i) => {
+    const el = document.createElement("div");
+    el.className = "frame"; el.draggable = true; el.dataset.i = i;
+    el.innerHTML = `
+      <div class="thumb"><img src="${fr.url}" alt=""></div>
+      <span class="idx">${i + 1}</span>
+      <div class="acts">
+        <button title="Move left" data-a="left">‹</button>
+        <button title="Move right" data-a="right">›</button>
+        <button title="Duplicate" data-a="dup">⧉</button>
+        <button title="Remove" data-a="del">✕</button>
+      </div>
+      <div class="meta"><input type="number" min="20" step="10" value="${fr.delay}" title="${fr.name}"><span class="ms">ms</span></div>`;
+    el.querySelector("input").onchange = (e) => { fr.delay = clampDelay(e.target.value); e.target.value = fr.delay; updateInfo(); };
+    el.querySelectorAll("button").forEach(b => b.onclick = (e) => { e.stopPropagation(); act(b.dataset.a, i); });
+    el.addEventListener("dragstart", (e) => { dragIdx = i; el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", i); });
+    el.addEventListener("dragend", () => { dragIdx = null; el.classList.remove("dragging"); document.querySelectorAll(".frame.target").forEach(n => n.classList.remove("target")); });
+    el.addEventListener("dragover", (e) => { if (dragIdx === null) return; e.preventDefault(); el.classList.add("target"); });
+    el.addEventListener("dragleave", () => el.classList.remove("target"));
+    el.addEventListener("drop", (e) => {
+      if (dragIdx === null) return;
+      e.preventDefault(); e.stopPropagation();
+      const [m] = frames.splice(dragIdx, 1);
+      frames.splice(i, 0, m);
+      render();
+    });
+    wrap.appendChild(el);
+  });
+  $("empty").style.display = frames.length ? "none" : "block";
+  $("export").disabled = !frames.length;
+  updateInfo();
+  restartPreview();
+}
+
+function act(a, i) {
+  if (a === "del") { URL.revokeObjectURL(frames[i].url); frames.splice(i, 1); }
+  if (a === "dup") { const f = frames[i]; frames.splice(i + 1, 0, { ...f, id: ++uid }); }
+  if (a === "left" && i > 0) [frames[i - 1], frames[i]] = [frames[i], frames[i - 1]];
+  if (a === "right" && i < frames.length - 1) [frames[i + 1], frames[i]] = [frames[i], frames[i + 1]];
+  render();
+}
+
+$("applyAll").onclick = () => { const d = clampDelay($("allDelay").value); frames.forEach(f => f.delay = d); render(); };
+$("reverse").onclick = () => { frames.reverse(); render(); };
+$("clear").onclick = () => { frames.forEach(f => URL.revokeObjectURL(f.url)); frames = []; render(); };
+
+function updateInfo() {
+  const total = frames.reduce((s, f) => s + f.delay, 0);
+  $("count").textContent = `${frames.length} frame${frames.length === 1 ? "" : "s"} · ${(total / 1000).toFixed(2)}s`;
+  const { w, h } = outSize();
+  $("dims").textContent = frames.length ? `Output: ${w} × ${h}px` : "";
+}
+
+// ---------- sizing / drawing ----------
+function outSize() {
+  const wp = $("widthPreset").value;
+  const w = wp === "custom" ? Math.max(16, Math.min(4000, +$("widthCustom").value || 480)) : +wp;
+  let ratio = 1;
+  if ($("aspect").value === "first") { if (frames[0]) ratio = frames[0].bitmap.width / frames[0].bitmap.height; }
+  else ratio = +$("aspect").value;
+  return { w: Math.round(w), h: Math.max(1, Math.round(w / ratio)) };
+}
+
+function drawFrame(ctx, bmp, w, h) {
+  const fit = $("fit").value;
+  ctx.fillStyle = $("bg").value;
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  if (fit === "stretch") { ctx.drawImage(bmp, 0, 0, w, h); return; }
+  const s = fit === "cover" ? Math.max(w / bmp.width, h / bmp.height) : Math.min(w / bmp.width, h / bmp.height);
+  const dw = bmp.width * s, dh = bmp.height * s;
+  ctx.drawImage(bmp, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+// ---------- live preview ----------
+const pv = $("preview"), pctx = pv.getContext("2d");
+let pIdx = 0, pTimer = null, playing = true;
+function restartPreview() { clearTimeout(pTimer); pIdx = 0; tick(); }
+function tick() {
+  clearTimeout(pTimer);
+  document.querySelectorAll(".frame.playing").forEach(n => n.classList.remove("playing"));
+  if (!frames.length) { pctx.clearRect(0, 0, pv.width, pv.height); $("pinfo").textContent = ""; return; }
+  const { w, h } = outSize();
+  const s = Math.min(1, 600 / Math.max(w, h));   // keep preview canvas light
+  pv.width = Math.round(w * s); pv.height = Math.round(h * s);
+  pIdx %= frames.length;
+  drawFrame(pctx, frames[pIdx].bitmap, pv.width, pv.height);
+  document.querySelector(`.frame[data-i="${pIdx}"]`)?.classList.add("playing");
+  $("pinfo").textContent = `Frame ${pIdx + 1} / ${frames.length}`;
+  if (!playing) return;
+  const d = frames[pIdx].delay;
+  pTimer = setTimeout(() => { pIdx++; tick(); }, d);
+}
+$("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; if (playing) { pIdx++; tick(); } else clearTimeout(pTimer); };
+
+// ---------- settings wiring ----------
+$("widthPreset").onchange = () => { $("widthCustom").style.display = $("widthPreset").value === "custom" ? "" : "none"; updateInfo(); restartPreview(); };
+["widthCustom", "aspect", "fit", "bg"].forEach(id => $(id).addEventListener("input", () => { updateInfo(); restartPreview(); }));
+$("loop").onchange = () => { $("loopN").style.display = $("loop").value === "count" ? "" : "none"; };
+$("colors").oninput = () => { $("colorsV").textContent = $("colors").value; };
+
+// ---------- export ----------
+const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+function ditherIndex(rgba, w, h, palette) {
+  // Floyd–Steinberg error diffusion onto a fixed palette
+  const buf = new Float32Array(w * h * 3);
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) { buf[j] = rgba[i]; buf[j + 1] = rgba[i + 1]; buf[j + 2] = rgba[i + 2]; }
+  const out = new Uint8Array(w * h);
+  const cache = new Map();
+  const nearest = (r, g, b) => {
+    const key = (r >> 2) << 12 | (g >> 2) << 6 | (b >> 2);
+    let hit = cache.get(key); if (hit !== undefined) return hit;
+    let best = 0, bd = Infinity;
+    for (let k = 0; k < palette.length; k++) {
+      const p = palette[k], dr = r - p[0], dg = g - p[1], db = b - p[2];
+      const d = dr * dr * 2 + dg * dg * 4 + db * db * 3;
+      if (d < bd) { bd = d; best = k; }
+    }
+    cache.set(key, best); return best;
+  };
+  const push = (x, y, er, eg, eb, f) => {
+    if (x < 0 || x >= w || y >= h) return;
+    const j = (y * w + x) * 3; buf[j] += er * f; buf[j + 1] += eg * f; buf[j + 2] += eb * f;
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const j = (y * w + x) * 3;
+    const r = Math.max(0, Math.min(255, buf[j])), g = Math.max(0, Math.min(255, buf[j + 1])), b = Math.max(0, Math.min(255, buf[j + 2]));
+    const k = nearest(r | 0, g | 0, b | 0); out[y * w + x] = k;
+    const p = palette[k], er = r - p[0], eg = g - p[1], eb = b - p[2];
+    push(x + 1, y, er, eg, eb, 7 / 16); push(x - 1, y + 1, er, eg, eb, 3 / 16);
+    push(x, y + 1, er, eg, eb, 5 / 16); push(x + 1, y + 1, er, eg, eb, 1 / 16);
+  }
+  return out;
+}
+
+function samplePixels(list, maxPx = 1_500_000) {
+  const total = list.reduce((s, d) => s + d.length / 4, 0);
+  const step = Math.max(1, Math.ceil(total / maxPx));
+  const out = new Uint8ClampedArray(Math.ceil(total / step) * 4 + 4);
+  let o = 0, c = 0;
+  for (const d of list) for (let i = 0; i < d.length; i += 4) {
+    if (c++ % step) continue;
+    out[o++] = d[i]; out[o++] = d[i + 1]; out[o++] = d[i + 2]; out[o++] = 255;
+  }
+  return out.subarray(0, o);
+}
+
+$("export").onclick = async () => {
+  if (!frames.length) return;
+  const btn = $("export"), bar = $("progress"), fill = bar.firstElementChild;
+  btn.disabled = true; btn.textContent = "Encoding…"; bar.style.display = "block"; fill.style.width = "0";
+  const t0 = performance.now();
+  try {
+    const { w, h } = outSize();
+    const colors = +$("colors").value, format = $("format").value;
+    const dither = $("dither").value === "fs", global = $("paletteMode").value === "global";
+    const skip = +$("skip").value;
+
+    // pick frames (skipped frames donate their time to the kept one)
+    const picked = [];
+    frames.forEach((f, i) => {
+      if (i % skip === 0) picked.push({ bitmap: f.bitmap, delay: f.delay });
+      else picked[picked.length - 1].delay += f.delay;
+    });
+
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    const datas = [];
+    for (const f of picked) { drawFrame(ctx, f.bitmap, w, h); datas.push(ctx.getImageData(0, 0, w, h).data); }
+
+    const sharedPalette = global ? quantize(samplePixels(datas), colors, { format }) : null;
+
+    let repeat = 0;                                   // 0 = loop forever
+    const mode = $("loop").value;
+    if (mode === "once") repeat = -1;                 // no loop extension
+    if (mode === "count") repeat = Math.max(1, (+$("loopN").value || 2) - 1);
+
+    const gif = GIFEncoder();
+    for (let i = 0; i < picked.length; i++) {
+      const data = datas[i];
+      const palette = sharedPalette || quantize(data, colors, { format });
+      const index = dither ? ditherIndex(data, w, h, palette) : applyPalette(data, palette, format);
+      // with a shared palette only the first frame carries it (as the global colour table)
+      const opts = { delay: picked[i].delay };
+      if (!global || i === 0) opts.palette = palette;
+      if (i === 0) opts.repeat = repeat;
+      gif.writeFrame(index, w, h, opts);
+      fill.style.width = `${((i + 1) / picked.length) * 100}%`;
+      await nextFrame();
+    }
+    gif.finish();
+    const blob = new Blob([gif.bytes()], { type: "image/gif" });
+    const url = URL.createObjectURL(blob);
+    const old = $("result").src; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    $("result").src = url;
+    const name = ($("fname").value.trim() || "animation").replace(/\.gif$/i, "") + ".gif";
+    $("dl").href = url; $("dl").download = name; $("dl").textContent = `Download ${name}`;
+    $("rSize").textContent = fmtBytes(blob.size);
+    $("rDims").textContent = `${w}×${h} · ${picked.length}f`;
+    $("rTime").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s`;
+    $("resultBox").style.display = "flex";
+  } catch (e) {
+    console.error(e); alert("Export failed: " + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Export GIF"; bar.style.display = "none";
+  }
+};
+
+const fmtBytes = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`;
+
+render();
+window.__gifmaker = { addFiles, get frames() { return frames; } };
+</script>
+</body>
+</html>
